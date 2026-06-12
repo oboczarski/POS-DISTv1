@@ -271,8 +271,38 @@ const POS_CONFIG = {
   WR: {low:'#8153ff', mid:'#4276ff', high:'#0299fe'},
   TE: {low:'#ff6bc8', mid:'#bf4be4', high:'#7f2fff'}
 };
-const RANGE_COLORS = {'12':{RB:'#00ad87',WR:'#0467c1'},'36':{RB:'#00ffc6',WR:'#2c9cff'},'60':{RB:'#6afff6',WR:'#6ab7fc'}};
-const state = {range:'Top 60', activePositions:['QB','RB','WR','TE'], mode:'single'};
+const RANGE_COLORS = {'12':{RB:'#007d66',WR:'#0056a7'},'36':{RB:'#00c99d',WR:'#2499ff'},'60':{RB:'#7dffac',WR:'#41dfff'}};
+const G1_POINT_STYLE = {
+  desktopRadius: 9,
+  desktopStrokeWidth: 1,
+  desktopLabelSize: 11,
+  desktopLabelWeight: 400,
+  desktopLabelColor: '#FFF',
+  mobileRadius: 3.3,
+  mobileStrokeWidth: 1.6,
+  collisionOffsetDesktop: 13,
+  collisionOffsetMobile: 3.8
+};
+const COMBO_BAR_STYLE = {
+  chartHeight: 500,
+  groupWidth: 89,
+  barWidth: 8.5,
+  barGap: 0.8,
+  rangeStep: 28,
+  markerTop: 32,
+  markerBottom: 104,
+  barTop: 124,
+  barBottom: 400,
+  barMax: 26
+};
+const state = {
+  range:'Top 60',
+  allPosActivePositions:['QB','RB','WR','TE'],
+  mode:'single',
+  supplyView:'rbwr',
+  comboMinYear:2014,
+  comboMaxYear:YEARS.at(-1)
+};
 const tip = document.getElementById('tip');
 function byId(id) { return document.getElementById(id); }
 function showTip(evt, html) { tip.innerHTML=html; tip.style.opacity=1; tip.style.left=evt.clientX+'px'; tip.style.top=(evt.clientY-12)+'px'; }
@@ -312,69 +342,188 @@ function getRangeSummary(range) {
   const firstRbOverWrIndex=YEARS.findIndex((_,i)=>rb[i]>wr[i]);
   const wrThreeYear=wr.slice(2).map((value,i)=>({from:YEARS[i],year:YEARS[i+2],change:value-wr[i]}));
   const wrWorstThreeYear=[...wrThreeYear].sort((a,b)=>a.change-b.change)[0];
+  const y2020=YEARS.indexOf(2020);
   const wr2325=wr.at(-1)-wr[YEARS.indexOf(2023)];
-  return {range,size:rangeSize(range),stats,current,leader,rbWrDiff:current.RB-current.WR,firstRbOverWr:firstRbOverWrIndex>=0?YEARS[firstRbOverWrIndex]:null,wr2325,wr2325IsWorst:wrWorstThreeYear?.from===2023 && wrWorstThreeYear?.year===2025,rbMax:Math.max(...rb),wrMin:Math.min(...wr)};
+  const rb2020To2025=rb.at(-1)-rb[y2020];
+  const wr2020To2025=wr.at(-1)-wr[y2020];
+  return {range,size:rangeSize(range),stats,current,leader,rbWrDiff:current.RB-current.WR,firstRbOverWr:firstRbOverWrIndex>=0?YEARS[firstRbOverWrIndex]:null,wr2325,wr2325IsWorst:wrWorstThreeYear?.from===2023 && wrWorstThreeYear?.year===2025,rb2020To2025,wr2020To2025,rbMax:Math.max(...rb),wrMin:Math.min(...wr)};
 }
 function pathFromPoints(points) { return points.map((p,i)=>(i?'L':'M')+' '+p[0].toFixed(2)+' '+p[1].toFixed(2)).join(' '); }
 function smoothPath(points, smoothing=.18) { if(!points.length)return''; let d=`M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`; for(let i=0;i<points.length-1;i++){ const p0=points[i-1]||points[i],p1=points[i],p2=points[i+1],p3=points[i+2]||p2; const cp1x=p1[0]+(p2[0]-p0[0])*smoothing,cp1y=p1[1]+(p2[1]-p0[1])*smoothing,cp2x=p2[0]-(p3[0]-p1[0])*smoothing,cp2y=p2[1]-(p3[1]-p1[1])*smoothing; d+=` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`; } return d; }
 function gradientId(range,pos,index) { return `grad-${range.replaceAll(' ','')}-${pos}-${index}`; }
+function isRbWrView() { return state.supplyView === 'rbwr'; }
+function isMobileViewport() { return window.matchMedia && window.matchMedia('(max-width: 700px)').matches; }
+function getEffectivePositions() { return isRbWrView() ? ['RB','WR'] : [...state.allPosActivePositions]; }
+function getDynamicYDomain(range, positions) {
+  const values=positions.flatMap(pos=>getValues(range,pos));
+  const minValue=Math.min(...values), maxValue=Math.max(...values);
+  return {min:minValue<=3?0:Math.max(0,minValue-1), max:maxValue+1};
+}
+function getGlobalYDomain(range, positions) {
+  if (isRbWrView()) return getDynamicYDomain(range, positions);
+  return {min:0, max:Math.max(rangeSize(range)<=12?6:12, Math.ceil(Math.max(...positions.flatMap(p=>getValues(range,p)))+2))};
+}
+function yTicks(min, max, target=5) {
+  if (max <= min) return [min,max];
+  const step=Math.max(1, Math.ceil((max-min)/target));
+  const ticks=[min];
+  for(let v=Math.ceil(min/step)*step; v<max; v+=step) if(!ticks.includes(v)) ticks.push(v);
+  if(!ticks.includes(max)) ticks.push(max);
+  return ticks;
+}
+function clampComboYearRange(changed) {
+  if (state.comboMinYear > state.comboMaxYear) {
+    if (changed === 'min') state.comboMaxYear = state.comboMinYear;
+    else state.comboMinYear = state.comboMaxYear;
+  }
+}
+function getYearsInComboWindow() {
+  clampComboYearRange();
+  return YEARS.filter(year=>year>=state.comboMinYear && year<=state.comboMaxYear);
+}
+function renderComboControls() {
+  const minNode=byId('comboMinYear'), maxNode=byId('comboMaxYear');
+  if(!minNode || !maxNode) return;
+  const options=YEARS.map(year=>`<option value="${year}">${year}</option>`).join('');
+  minNode.innerHTML=options;
+  maxNode.innerHTML=options;
+  minNode.value=String(state.comboMinYear);
+  maxNode.value=String(state.comboMaxYear);
+  minNode.onchange=()=>{ state.comboMinYear=Number(minNode.value); clampComboYearRange('min'); renderAll(); };
+  maxNode.onchange=()=>{ state.comboMaxYear=Number(maxNode.value); clampComboYearRange('max'); renderAll(); };
+}
 function refreshControls() {
   byId('rangeButtons').innerHTML=RANGE_OPTIONS.map(r=>`<button class="range-btn ${state.range===r?'active':''}" data-range="${r}">${r}</button>`).join('');
-  byId('positionButtons').innerHTML=POSITIONS.map(pos=>{ const cfg=POS_CONFIG[pos], cur=getRangeSummary(state.range).current[pos], active=state.activePositions.includes(pos); return `<button class="pos-btn ${active?'active':''}" data-pos="${pos}" style="--pos-low:${cfg.low};--pos-mid:${cfg.mid};--pos-high:${cfg.high}"><span class="pos-dot"></span><span class="pos-name">${pos}</span><span class="pos-current">${cur}</span></button>`; }).join('');
+  const positionsForButtons=isRbWrView()?['RB','WR']:POSITIONS;
+  byId('positionButtons').innerHTML=positionsForButtons.map(pos=>{ const cfg=POS_CONFIG[pos], cur=getRangeSummary(state.range).current[pos], active=isRbWrView() || state.allPosActivePositions.includes(pos), locked=isRbWrView(); return `<button class="pos-btn ${active?'active':''} ${locked?'locked':''}" data-pos="${pos}" ${locked?'disabled':''} style="--pos-low:${cfg.low};--pos-mid:${cfg.mid};--pos-high:${cfg.high}"><span class="pos-dot"></span><span class="pos-name">${pos}</span><span class="pos-current">${cur}</span></button>`; }).join('');
   document.querySelectorAll('.range-btn').forEach(b=>b.addEventListener('click',()=>{state.range=b.dataset.range; renderAll();}));
-  document.querySelectorAll('.pos-btn').forEach(b=>b.addEventListener('click',()=>{ const pos=b.dataset.pos; if(state.activePositions.includes(pos) && state.activePositions.length>1) state.activePositions=state.activePositions.filter(p=>p!==pos); else if(!state.activePositions.includes(pos)) state.activePositions.push(pos); renderAll(); }));
-  document.querySelectorAll('.mode-btn').forEach(b=>{ b.classList.toggle('active',b.dataset.mode===state.mode); b.onclick=()=>{state.mode=b.dataset.mode; renderAll();}; });
+  document.querySelectorAll('.pos-btn').forEach(b=>b.addEventListener('click',()=>{ if(isRbWrView()) return; const pos=b.dataset.pos; if(state.allPosActivePositions.includes(pos) && state.allPosActivePositions.length>1) state.allPosActivePositions=state.allPosActivePositions.filter(p=>p!==pos); else if(!state.allPosActivePositions.includes(pos)) state.allPosActivePositions.push(pos); renderAll(); }));
+  document.querySelectorAll('[data-mode]').forEach(b=>{ b.classList.toggle('active',b.dataset.mode===state.mode); b.onclick=()=>{state.mode=b.dataset.mode; renderAll();}; });
+  document.querySelectorAll('[data-supply-view]').forEach(b=>{ b.classList.toggle('active',b.dataset.supplyView===state.supplyView); b.onclick=()=>{state.supplyView=b.dataset.supplyView; renderAll();}; });
+  renderComboControls();
 }
 function renderSummaryChips(summary) {
   const chips=[
     {label:'Selected range',value:summary.range,tone:''},
-    {label:'2025 leader',value:`${summary.leader.pos} ${summary.leader.value}`,tone:'hot'},
+    {label:'RB 2020 → 2025',value:fmtDelta(summary.rb2020To2025),tone:summary.rb2020To2025>0?'up':summary.rb2020To2025<0?'down':''},
     {label:'RB minus WR',value:fmtDelta(summary.rbWrDiff),tone:summary.rbWrDiff>0?'up':summary.rbWrDiff<0?'down':''},
-    {label:'WR 2023→2025',value:fmtDelta(summary.wr2325),tone:summary.wr2325<0?'down':summary.wr2325>0?'up':''}
+    {label:'WR 2020 → 2025',value:fmtDelta(summary.wr2020To2025),tone:summary.wr2020To2025>0?'up':summary.wr2020To2025<0?'down':''}
   ];
   byId('summaryChips').innerHTML=chips.map(c=>`<div class="stat-chip ${c.tone}"><div class="stat-label">${c.label}</div><div class="stat-value">${c.value}</div></div>`).join('');
 }
 function renderGlobalChart() {
-  const summary=getRangeSummary(state.range); byId('globalTitle').textContent=state.mode==='grid'?'Four-range supply comparison':`${state.range} positional supply`; byId('globalSubtitle').textContent=state.mode==='grid'?'Four-range comparison: Top 60, Top 48, Top 36, and Top 24.':'Position counts inside the selected fantasy-points rank range.';
+  const summary=getRangeSummary(state.range), supplyLabel=isRbWrView()?'RB vs WR':'All positions';
+  byId('globalTitle').textContent=state.mode==='grid'?`${supplyLabel} range comparison`:`${state.range} ${supplyLabel} supply`;
+  byId('globalSubtitle').textContent=state.mode==='grid'?'Four-range comparison: Top 60, Top 48, Top 36, and Top 24.':'Position counts inside the selected fantasy-points rank range.';
   if(state.mode==='grid') renderGlobalGrid(); else renderGlobalSingle();
   renderSummaryChips(summary); renderProfiles(summary);
 }
 function renderGlobalSingle() {
-  const range=state.range, active=state.activePositions, w=1200,h=430,m={l:50,r:52,t:32,b:54},plotW=w-m.l-m.r,plotH=h-m.t-m.b;
-  const yMax=Math.max(rangeSize(range)<=12?6:12, Math.ceil(Math.max(...active.flatMap(p=>getValues(range,p)))+2));
-  const x=i=>m.l+i/(YEARS.length-1)*plotW, y=v=>m.t+plotH-v/yMax*plotH;
+  const range=state.range, active=getEffectivePositions(), mobile=isMobileViewport(), w=1200,h=mobile?390:430,m={l:50,r:58,t:34,b:54},plotW=w-m.l-m.r,plotH=h-m.t-m.b;
+  const domain=getGlobalYDomain(range,active), ySpan=Math.max(1,domain.max-domain.min);
+  const x=i=>m.l+i/(YEARS.length-1)*plotW, y=v=>m.t+plotH-(v-domain.min)/ySpan*plotH;
   let svg=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="POSITIONAL ANALYTICS ◊ 2007-2025">`;
   svg+=`<defs>`;
   for(const pos of active){ const values=getValues(range,pos), tiers=getTiers(values); for(let i=0;i<values.length-1;i++){ const cfg=POS_CONFIG[pos]; svg+=`<linearGradient id="${gradientId(range,pos,i)}" gradientUnits="userSpaceOnUse" x1="${x(i)}" y1="${y(values[i])}" x2="${x(i+1)}" y2="${y(values[i+1])}"><stop offset="0%" stop-color="${cfg[tiers[i]]}"/><stop offset="100%" stop-color="${cfg[tiers[i+1]]}"/></linearGradient>`; } }
   svg+=`</defs><rect x="0" y="0" width="${w}" height="${h}" rx="24" fill="rgba(0,0,0,.20)"/>`;
-  for(let v=0; v<=yMax; v+=Math.max(1, Math.ceil(yMax/6))){ svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.065)"/><text x="${m.l-12}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="11" font-weight="900">${v}</text>`; }
+  yTicks(domain.min,domain.max).forEach(v=>{ svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.065)"/><text x="${m.l-12}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="${mobile?10:11}" font-weight="900">${v}</text>`; });
   YEARS.forEach((year,i)=>{ const xx=x(i); svg+=`<line x1="${xx}" x2="${xx}" y1="${m.t}" y2="${h-m.b}" stroke="rgba(255,255,255,.032)"/>`; if(i%2===0 || i===YEARS.length-1) svg+=`<text x="${xx}" y="${h-22}" text-anchor="middle" fill="#71717a" font-size="11" font-weight="900">${year}</text>`; });
-  for(const pos of active){ const values=getValues(range,pos), cfg=POS_CONFIG[pos], tiers=getTiers(values); for(let i=0;i<values.length-1;i++){ svg+=`<line x1="${x(i)}" y1="${y(values[i])}" x2="${x(i+1)}" y2="${y(values[i+1])}" stroke="url(#${gradientId(range,pos,i)})" stroke-width="4.5" stroke-linecap="round" opacity=".95"/>`; } values.forEach((val,i)=>{ svg+=`<circle cx="${x(i)}" cy="${y(val)}" r="${i===values.length-1?5.5:3.2}" fill="#050711" stroke="${cfg[tiers[i]]}" stroke-width="2" onmousemove="showTip(event,'<strong>${pos} · ${YEARS[i]}</strong><br>${range} count: ${val}')" onmouseleave="hideTip()"/>`; }); const last=values.at(-1); svg+=`<text x="${x(values.length-1)+10}" y="${y(last)+4}" fill="${cfg.high}" font-size="13" font-weight="1000">${pos}</text>`; }
+  for(const pos of active){ const values=getValues(range,pos), cfg=POS_CONFIG[pos], tiers=getTiers(values); for(let i=0;i<values.length-1;i++){ svg+=`<line x1="${x(i)}" y1="${y(values[i])}" x2="${x(i+1)}" y2="${y(values[i+1])}" stroke="url(#${gradientId(range,pos,i)})" stroke-width="${isRbWrView()?5.2:4.5}" stroke-linecap="round" opacity=".95"/>`; } values.forEach((val,i)=>{ const labelOffset=pos==='RB'?-11:15, labelSize=mobile?8.4:9.6; svg+=`<circle cx="${x(i)}" cy="${y(val)}" r="${i===values.length-1?5.7:3.6}" fill="#050711" stroke="${cfg[tiers[i]]}" stroke-width="2" onmousemove="showTip(event,'<strong>${pos} · ${YEARS[i]}</strong><br>${range} count: ${val}')" onmouseleave="hideTip()"/>`; if(isRbWrView()) svg+=`<text class="dyn-data-label" x="${x(i)}" y="${y(val)+labelOffset}" text-anchor="middle" fill="${cfg.high}" font-size="${labelSize}" font-weight="1000">${val}</text>`; }); const last=values.at(-1); svg+=`<text x="${x(values.length-1)+10}" y="${y(last)+4}" fill="${cfg.high}" font-size="13" font-weight="1000">${isRbWrView()?`${pos} ${last}`:pos}</text>`; }
   svg+=`<text x="${m.l}" y="22" fill="#e4e4e7" font-size="13" font-weight="1000">${range} · active positions: ${active.join(', ')}</text></svg>`;
   byId('globalChart').innerHTML=svg;
 }
 function renderGlobalGrid() {
-  const ranges=RANGE_OPTIONS_WIDE_FIRST, active=state.activePositions, panelW=560,panelH=220,gap=18,w=panelW*2+gap,h=panelH*2+gap;
+  const ranges=RANGE_OPTIONS_WIDE_FIRST, active=getEffectivePositions(), mobile=isMobileViewport(), panelW=560,panelH=mobile?238:220,gap=18,w=panelW*2+gap,h=panelH*2+gap;
   let svg=`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Four range supply comparison">`;
-  ranges.forEach((range,idx)=>{ const col=idx%2,row=Math.floor(idx/2),ox=col*(panelW+gap),oy=row*(panelH+gap),m={l:34,r:34,t:32,b:34},plotW=panelW-m.l-m.r,plotH=panelH-m.t-m.b; const maxVal=Math.max(8,...active.flatMap(p=>getValues(range,p)))+2, x=i=>ox+m.l+i/(YEARS.length-1)*plotW, y=v=>oy+m.t+plotH-v/maxVal*plotH; svg+=`<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" rx="24" fill="rgba(0,0,0,.24)" stroke="rgba(255,255,255,.075)"/><text x="${ox+18}" y="${oy+23}" fill="#f8fafc" font-size="16" font-weight="1000">${range}</text>`; [0,Math.floor(maxVal/2),maxVal].forEach(v=>svg+=`<line x1="${ox+m.l}" x2="${ox+panelW-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.055)"/>`); active.forEach(pos=>{ const vals=getValues(range,pos), cfg=POS_CONFIG[pos], pts=vals.map((v,i)=>[x(i),y(v)]); svg+=`<path d="${smoothPath(pts,.18)}" fill="none" stroke="${cfg.high}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".92"/>`; const last=pts.at(-1); svg+=`<text x="${last[0]+6}" y="${last[1]+3}" fill="${cfg.high}" font-size="10" font-weight="1000">${pos}</text>`; }); });
+  ranges.forEach((range,idx)=>{ const col=idx%2,row=Math.floor(idx/2),ox=col*(panelW+gap),oy=row*(panelH+gap),m={l:40,r:42,t:34,b:34},plotW=panelW-m.l-m.r,plotH=panelH-m.t-m.b; const domain=getGlobalYDomain(range,active), ySpan=Math.max(1,domain.max-domain.min), x=i=>ox+m.l+i/(YEARS.length-1)*plotW, y=v=>oy+m.t+plotH-(v-domain.min)/ySpan*plotH; svg+=`<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" rx="24" fill="rgba(0,0,0,.24)" stroke="rgba(255,255,255,.075)"/><text x="${ox+18}" y="${oy+23}" fill="#f8fafc" font-size="16" font-weight="1000">${range}</text>`; yTicks(domain.min,domain.max,3).forEach(v=>svg+=`<line x1="${ox+m.l}" x2="${ox+panelW-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.055)"/><text x="${ox+m.l-8}" y="${y(v)+3}" text-anchor="end" fill="#52525b" font-size="8.5" font-weight="900">${v}</text>`); active.forEach(pos=>{ const vals=getValues(range,pos), cfg=POS_CONFIG[pos], pts=vals.map((v,i)=>[x(i),y(v)]); svg+=`<path d="${smoothPath(pts,.18)}" fill="none" stroke="${cfg.high}" stroke-width="${isRbWrView()?3.5:3}" stroke-linecap="round" stroke-linejoin="round" opacity=".92"/>`; vals.forEach((val,i)=>{ svg+=`<circle cx="${x(i)}" cy="${y(val)}" r="2.8" fill="#050711" stroke="${cfg.high}" stroke-width="1.6"/>`; if(isRbWrView()) svg+=`<text x="${x(i)}" y="${y(val)+(pos==='RB'?-6:10)}" text-anchor="middle" fill="${cfg.high}" font-size="7.2" font-weight="1000">${val}</text>`; }); const last=pts.at(-1); svg+=`<text x="${last[0]+6}" y="${last[1]+3}" fill="${cfg.high}" font-size="10" font-weight="1000">${pos}</text>`; }); });
   svg+='</svg>'; byId('globalChart').innerHTML=svg;
 }
 function renderProfiles(summary) {
-  byId('positionProfiles').innerHTML=POSITIONS.map(pos=>{ const stat=summary.stats[pos], cfg=POS_CONFIG[pos], active=state.activePositions.includes(pos); const trend=stat.changeFromPrevious>0?'up':stat.changeFromPrevious<0?'down':''; return `<div class="profile-card" style="--pos-low:${cfg.low};--pos-mid:${cfg.mid};--pos-high:${cfg.high};opacity:${active?1:.42}"><div class="profile-top"><div><div class="profile-pos">${pos}</div><div class="profile-small">2025 position file</div></div><div class="trend-pill ${trend}">${fmtDelta(stat.changeFromPrevious)} YoY</div></div><div class="profile-metrics"><div class="metric-big"><div class="metric-label">Current</div><div class="metric-num">${stat.current}</div><div class="profile-small">Rank #${stat.rank} of 19</div></div><div><div class="metric-box"><div class="metric-label">Avg</div><div class="metric-num">${fmt(stat.avg)}</div></div><div style="height:8px"></div><div class="metric-box"><div class="metric-label">Peak</div><div class="metric-num">${stat.max}</div></div></div></div></div>`; }).join('');
+  const activePositions=getEffectivePositions();
+  byId('positionProfiles').innerHTML=POSITIONS.map(pos=>{ const stat=summary.stats[pos], cfg=POS_CONFIG[pos], active=activePositions.includes(pos); const trend=stat.changeFromPrevious>0?'up':stat.changeFromPrevious<0?'down':''; return `<div class="profile-card" style="--pos-low:${cfg.low};--pos-mid:${cfg.mid};--pos-high:${cfg.high};opacity:${active?1:.42}"><div class="profile-top"><div><div class="profile-pos">${pos}</div><div class="profile-small">2025 position file</div></div><div class="trend-pill ${trend}">${fmtDelta(stat.changeFromPrevious)} YoY</div></div><div class="profile-metrics"><div class="metric-big"><div class="metric-label">Current</div><div class="metric-num">${stat.current}</div><div class="profile-small">Rank #${stat.rank} of 19</div></div><div><div class="metric-box"><div class="metric-label">Avg</div><div class="metric-num">${fmt(stat.avg)}</div></div><div style="height:8px"></div><div class="metric-box"><div class="metric-label">Peak</div><div class="metric-num">${stat.max}</div></div></div></div></div>`; }).join('');
 }
 function renderMiniYearGrid() {
-  const cols=4,panelW=240,panelH=138,gapX=14,gapY=14,rows=Math.ceil(YEARS.length/cols),w=cols*panelW+(cols-1)*gapX,h=rows*panelH+(rows-1)*gapY,maxY=30;
+  const mobile=isMobileViewport(), cols=mobile?2:4,panelW=mobile?178:240,panelH=mobile?126:150,gapX=mobile?10:14,gapY=mobile?10:14,rows=Math.ceil(YEARS.length/cols),w=cols*panelW+(cols-1)*gapX,h=rows*panelH+(rows-1)*gapY,maxY=30;
   let svg=`<svg viewBox="0 0 ${w} ${h}">`;
-  YEARS.forEach((year,idx)=>{ const col=idx%cols,row=Math.floor(idx/cols),ox=col*(panelW+gapX),oy=row*(panelH+gapY),m={l:28,r:12,t:25,b:25},plotW=panelW-m.l-m.r,plotH=panelH-m.t-m.b, cuts=[6,12,24,36,48,60]; const x=i=>ox+m.l+i/(cuts.length-1)*plotW, y=v=>oy+m.t+plotH-v/maxY*plotH; const wr=cuts.map(c=>POS_DATA[`Top ${c}`].WR[YEARS.indexOf(year)]), rb=cuts.map(c=>POS_DATA[`Top ${c}`].RB[YEARS.indexOf(year)]); svg+=`<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" rx="18" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.10)"/><text x="${ox+14}" y="${oy+18}" fill="#edf5ff" font-size="12" font-weight="950">${year}</text><text x="${ox+66}" y="${oy+18}" fill="#0299fe" font-size="10" font-weight="900">WR ${wr.at(-1)}</text><text x="${ox+115}" y="${oy+18}" fill="#06ff97" font-size="10" font-weight="900">RB ${rb.at(-1)}</text>`; const wrPts=wr.map((v,i)=>[x(i),y(v)]), rbPts=rb.map((v,i)=>[x(i),y(v)]); svg+=`<path d="${smoothPath(wrPts,.20)}" fill="none" stroke="#0299fe" stroke-width="2.4" stroke-linecap="round"/><path d="${smoothPath(rbPts,.20)}" fill="none" stroke="#06ff97" stroke-width="2.4" stroke-linecap="round"/>`; });
+  YEARS.forEach((year,idx)=>{ const col=idx%cols,row=Math.floor(idx/cols),ox=col*(panelW+gapX),oy=row*(panelH+gapY),m={l:mobile?25:30,r:mobile?10:12,t:25,b:mobile?26:30},plotW=panelW-m.l-m.r,plotH=panelH-m.t-m.b, cuts=[6,12,24,36,48,60]; const x=i=>ox+m.l+i/(cuts.length-1)*plotW, y=v=>oy+m.t+plotH-v/maxY*plotH; const wr=cuts.map(c=>POS_DATA[`Top ${c}`].WR[YEARS.indexOf(year)]), rb=cuts.map(c=>POS_DATA[`Top ${c}`].RB[YEARS.indexOf(year)]); svg+=`<rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" rx="18" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.10)"/><text x="${ox+12}" y="${oy+17}" fill="#edf5ff" font-size="${mobile?10.5:12}" font-weight="950">${year}</text><text x="${ox+(mobile?54:66)}" y="${oy+17}" fill="#0299fe" font-size="${mobile?8.2:10}" font-weight="900">WR ${wr.at(-1)}</text><text x="${ox+(mobile?96:115)}" y="${oy+17}" fill="#06ff97" font-size="${mobile?8.2:10}" font-weight="900">RB ${rb.at(-1)}</text>`; [0,15,30].forEach(tick=>{ svg+=`<line x1="${ox+m.l}" x2="${ox+panelW-m.r}" y1="${y(tick)}" y2="${y(tick)}" stroke="rgba(255,255,255,.045)"/><text x="${ox+m.l-7}" y="${y(tick)+3}" text-anchor="end" fill="#52525b" font-size="${mobile?6.8:7.8}" font-weight="900">${tick}</text>`; }); svg+=`<line x1="${ox+m.l}" x2="${ox+m.l}" y1="${oy+m.t}" y2="${oy+m.t+plotH}" stroke="rgba(255,255,255,.12)"/><line x1="${ox+m.l}" x2="${ox+m.l+plotW}" y1="${oy+m.t+plotH}" y2="${oy+m.t+plotH}" stroke="rgba(255,255,255,.12)"/>`; cuts.forEach((cut,i)=>{ if([12,36,60].includes(cut)) svg+=`<text x="${x(i)}" y="${oy+panelH-8}" text-anchor="middle" fill="#71717a" font-size="${mobile?6.8:8}" font-weight="900">T${cut}</text>`; }); const wrPts=wr.map((v,i)=>[x(i),y(v)]), rbPts=rb.map((v,i)=>[x(i),y(v)]); svg+=`<path d="${smoothPath(wrPts,.20)}" fill="none" stroke="#0299fe" stroke-width="${mobile?2:2.4}" stroke-linecap="round"/><path d="${smoothPath(rbPts,.20)}" fill="none" stroke="#06ff97" stroke-width="${mobile?2:2.4}" stroke-linecap="round"/>`; });
   svg+='</svg>'; byId('miniYearGrid').innerHTML=svg;
 }
 function renderG1Lines() {
-  const w=1100,h=386,m={l:42,r:78,t:28,b:44},plotW=w-m.l-m.r,plotH=h-m.t-m.b,x=yr=>m.l+(yr-YEARS[0])/(YEARS.at(-1)-YEARS[0])*plotW,y=v=>m.t+plotH-v/27*plotH; const series=[['12','WR'],['36','WR'],['60','WR'],['12','RB'],['36','RB'],['60','RB']]; let svg=`<svg viewBox="0 0 ${w} ${h}">`; [0,5,10,15,20,25].forEach(v=>svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="10.5" font-weight="900">${v}</text>`); YEARS.forEach(yr=>{ const xx=x(yr); svg+=`<text x="${xx}" y="${h-16}" text-anchor="middle" fill="#71717a" font-size="10" font-weight="900">${yr}</text>`; }); series.forEach(([cut,pos],si)=>{ const color=RANGE_COLORS[cut][pos], vals=getValues(`Top ${cut}`,pos), pts=vals.map((v,i)=>[x(YEARS[i]),y(v)]), last=pts.at(-1), dash=si%3===1?'8 5':si%3===2?'2 5':''; svg+=`<path d="${smoothPath(pts)}" fill="none" stroke="${color}" stroke-width="2.5" ${dash?`stroke-dasharray="${dash}"`:''} stroke-linecap="round"/><text x="${last[0]+8}" y="${last[1]+4}" fill="${color}" font-size="10.2" font-weight="1000">${pos} T${cut}</text>`; }); svg+=`<text x="${m.l}" y="18" fill="#e4e4e7" font-size="13" font-weight="1000">WR/RB count lines · Scale max = 27</text></svg>`; byId('g1LineChart').innerHTML=svg;
+  const mobile=isMobileViewport(), w=1100,h=mobile?346:386,m={l:42,r:78,t:28,b:44};
+  const plotW=w-m.l-m.r, plotH=h-m.t-m.b;
+  const x=yr=>m.l+(yr-YEARS[0])/(YEARS.at(-1)-YEARS[0])*plotW;
+  const y=v=>m.t+plotH-v/27*plotH;
+  const series=[['12','WR'],['36','WR'],['60','WR'],['12','RB'],['36','RB'],['60','RB']];
+  let svg=`<svg viewBox="0 0 ${w} ${h}">`;
+  [0,5,10,15,20,25].forEach(v=>{
+    svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="${mobile?9:10.5}" font-weight="900">${v}</text>`;
+  });
+  YEARS.forEach((yr,i)=>{
+    const xx=x(yr);
+    if(!mobile || i%2===0 || i===YEARS.length-1) svg+=`<text x="${xx}" y="${h-16}" text-anchor="middle" fill="#71717a" font-size="${mobile?8.5:10}" font-weight="900">${yr}</text>`;
+  });
+
+  const pointEntries=[];
+  series.forEach(([cut,pos],si)=>{
+    const color=RANGE_COLORS[cut][pos], vals=getValues(`Top ${cut}`,pos);
+    const pts=vals.map((v,i)=>[x(YEARS[i]),y(v),v,i]), last=pts.at(-1);
+    const dash=si%3===1?'8 5':si%3===2?'2 5':'';
+    svg+=`<path d="${smoothPath(pts.map(p=>[p[0],p[1]]))}" fill="none" stroke="${color}" stroke-width="${mobile?2.2:2.5}" ${dash?`stroke-dasharray="${dash}"`:''} stroke-linecap="round" stroke-linejoin="round"/><text x="${last[0]+8}" y="${last[1]+4}" fill="${color}" font-size="${mobile?8.8:10.2}" font-weight="1000">${pos} T${cut}</text>`;
+    pts.forEach(p=>pointEntries.push({cut,pos,si,color,x:p[0],y:p[1],value:p[2],yearIndex:p[3]}));
+  });
+
+  const bucketTotals=new Map(), bucketSeen=new Map();
+  pointEntries.forEach(p=>{
+    const key=`${p.yearIndex}-${p.value}`;
+    bucketTotals.set(key,(bucketTotals.get(key)||0)+1);
+  });
+  pointEntries.forEach(p=>{
+    const key=`${p.yearIndex}-${p.value}`, total=bucketTotals.get(key), seen=bucketSeen.get(key)||0;
+    const dx=(seen-(total-1)/2)*(mobile?G1_POINT_STYLE.collisionOffsetMobile:G1_POINT_STYLE.collisionOffsetDesktop);
+    bucketSeen.set(key,seen+1);
+    const cx=p.x+dx;
+    const r=mobile?G1_POINT_STYLE.mobileRadius:G1_POINT_STYLE.desktopRadius;
+    const strokeWidth=mobile?G1_POINT_STYLE.mobileStrokeWidth:G1_POINT_STYLE.desktopStrokeWidth;
+    svg+=`<circle cx="${cx}" cy="${p.y}" r="${r}" fill="#050711" stroke="${p.color}" stroke-width="${strokeWidth}" onmousemove="showTip(event,'<strong>${p.pos} T${p.cut} · ${YEARS[p.yearIndex]}</strong><br>Count: ${p.value}')" onmouseleave="hideTip()"/>`;
+    if(!mobile) svg+=`<text x="${cx}" y="${p.y+2.2}" text-anchor="middle" fill="${G1_POINT_STYLE.desktopLabelColor}" font-size="${G1_POINT_STYLE.desktopLabelSize}" font-weight="${G1_POINT_STYLE.desktopLabelWeight}">${p.value}</text>`;
+  });
+  svg+=`<text x="${m.l}" y="18" fill="#e4e4e7" font-size="13" font-weight="1000">WR/RB count lines · Scale max = 27</text></svg>`;
+  byId('g1LineChart').innerHTML=svg;
 }
 function renderCombo() {
-  const groupW=86,w=60+YEARS.length*groupW+22,h=620,markerTop=38,markerBottom=132,barTop=150,barBottom=520,barMax=27; const vals=YEARS.flatMap((yr,i)=>['12','36','60'].map(c=>getValues(`Top ${c}`,'WR')[i]-getValues(`Top ${c}`,'RB')[i])); const gapMin=Math.min(-10,Math.min(...vals)-1),gapMax=Math.max(12,Math.max(...vals)+1),gapY=v=>markerTop+(markerBottom-markerTop)-(v-gapMin)/(gapMax-gapMin)*(markerBottom-markerTop),gapZero=gapY(0),barY=v=>barTop+(barBottom-barTop)-v/barMax*(barBottom-barTop); let svg=`<svg viewBox="0 0 ${w} ${h}">`; [0,5,10,15,20,25].forEach(v=>svg+=`<line x1="46" x2="${w-18}" y1="${barY(v)}" y2="${barY(v)}" stroke="rgba(255,255,255,.075)"/><text x="36" y="${barY(v)+4}" text-anchor="end" fill="#52525b" font-size="11" font-weight="900">${v}</text>`); YEARS.forEach((year,yi)=>{ const gx=46+yi*groupW+10; ['12','36','60'].forEach((cut,ci)=>{ const cx=gx+ci*20, wr=getValues(`Top ${cut}`,'WR')[yi], rb=getValues(`Top ${cut}`,'RB')[yi], gap=wr-rb, wrColor=RANGE_COLORS[cut].WR,rbColor=RANGE_COLORS[cut].RB,gapColor=gap>=0?wrColor:rbColor,markerX=cx+8.5,markerY=gapY(gap); svg+=`<line x1="${markerX}" x2="${markerX}" y1="${gapZero}" y2="${markerY}" stroke="${gapColor}" stroke-width="3.5" stroke-linecap="round"/><circle cx="${markerX}" cy="${markerY}" r="5.2" fill="#050711" stroke="${gapColor}" stroke-width="2.4"/><text x="${markerX}" y="${gap>=0?markerY-8:markerY+15}" text-anchor="middle" fill="${gapColor}" font-size="9" font-weight="1000">${gap>0?'+':''}${gap}</text><rect x="${cx}" y="${barY(wr)}" width="8" height="${barBottom-barY(wr)}" rx="4" fill="${wrColor}"/><rect x="${cx+9.5}" y="${barY(rb)}" width="8" height="${barBottom-barY(rb)}" rx="4" fill="${rbColor}"/><text x="${cx+8.5}" y="${h-48}" text-anchor="middle" fill="#71717a" font-size="9" font-weight="900">T${cut}</text>`; }); svg+=`<text x="${gx+28}" y="${h-24}" text-anchor="middle" fill="#e4e4e7" font-size="10.5" font-weight="1000">${year}</text>`; }); svg+=`<text x="46" y="24" fill="#e4e4e7" font-size="14" font-weight="1000">Bars = WR/RB counts · Markers = WR-RB gap</text></svg>`; byId('comboG1G2').innerHTML=svg;
+  const years=getYearsInComboWindow();
+  const groupW=COMBO_BAR_STYLE.groupWidth;
+  const w=60+years.length*groupW+22, h=COMBO_BAR_STYLE.chartHeight;
+  const markerTop=COMBO_BAR_STYLE.markerTop, markerBottom=COMBO_BAR_STYLE.markerBottom;
+  const barTop=COMBO_BAR_STYLE.barTop, barBottom=COMBO_BAR_STYLE.barBottom, barMax=COMBO_BAR_STYLE.barMax;
+  const barW=COMBO_BAR_STYLE.barWidth, barGap=COMBO_BAR_STYLE.barGap, rangeStep=COMBO_BAR_STYLE.rangeStep;
+  const vals=years.flatMap(yr=>{
+    const yi=YEARS.indexOf(yr);
+    return ['12','36','60'].map(c=>getValues(`Top ${c}`,'WR')[yi]-getValues(`Top ${c}`,'RB')[yi]);
+  });
+  const gapMin=Math.min(-10,Math.min(...vals)-1), gapMax=Math.max(12,Math.max(...vals)+1);
+  const gapY=v=>markerTop+(markerBottom-markerTop)-(v-gapMin)/(gapMax-gapMin)*(markerBottom-markerTop);
+  const gapZero=gapY(0), barY=v=>barTop+(barBottom-barTop)-Math.min(v,barMax)/barMax*(barBottom-barTop);
+  let svg=`<svg viewBox="0 0 ${w} ${h}">`;
+  [0,5,10,15,20,26].forEach(v=>{
+    svg+=`<line x1="46" x2="${w-18}" y1="${barY(v)}" y2="${barY(v)}" stroke="rgba(255,255,255,.075)"/><text x="36" y="${barY(v)+4}" text-anchor="end" fill="#52525b" font-size="10" font-weight="900">${v}</text>`;
+  });
+  years.forEach((year,windowIndex)=>{
+    const yi=YEARS.indexOf(year), gx=46+windowIndex*groupW+9;
+    ['12','36','60'].forEach((cut,ci)=>{
+      const cx=gx+ci*rangeStep, wr=getValues(`Top ${cut}`,'WR')[yi], rb=getValues(`Top ${cut}`,'RB')[yi];
+      const gap=wr-rb, wrColor=RANGE_COLORS[cut].WR, rbColor=RANGE_COLORS[cut].RB, gapColor=gap>=0?wrColor:rbColor;
+      const markerX=cx+barW+barGap/2, markerY=gapY(gap);
+      svg+=`<line x1="${markerX}" x2="${markerX}" y1="${gapZero}" y2="${markerY}" stroke="${gapColor}" stroke-width="3.3" stroke-linecap="round"/><circle cx="${markerX}" cy="${markerY}" r="4.8" fill="#050711" stroke="${gapColor}" stroke-width="2.1"/><text x="${markerX}" y="${gap>=0?markerY-7:markerY+13}" text-anchor="middle" fill="${gapColor}" font-size="8.4" font-weight="1000">${gap>0?'+':''}${gap}</text><rect x="${cx}" y="${barY(wr)}" width="${barW}" height="${barBottom-barY(wr)}" rx="4" fill="${wrColor}"/><rect x="${cx+barW+barGap}" y="${barY(rb)}" width="${barW}" height="${barBottom-barY(rb)}" rx="4" fill="${rbColor}"/><text x="${markerX}" y="${h-35}" text-anchor="middle" fill="#71717a" font-size="8.6" font-weight="900">T${cut}</text>`;
+    });
+    svg+=`<text x="${gx+30}" y="${h-15}" text-anchor="middle" fill="#e4e4e7" font-size="10" font-weight="1000">${year}</text>`;
+  });
+  svg+=`<text x="46" y="22" fill="#e4e4e7" font-size="13" font-weight="1000">Bars = WR/RB counts · Markers = WR-RB gap · ${state.comboMinYear}-${state.comboMaxYear}</text></svg>`;
+  byId('comboG1G2').innerHTML=svg;
 }
 function renderG2ThreeLines() {
   const w=1100,h=386,m={l:44,r:76,t:30,b:44},plotW=w-m.l-m.r,plotH=h-m.t-m.b,minY=-16,maxY=6,x=yr=>m.l+(yr-YEARS[0])/(YEARS.at(-1)-YEARS[0])*plotW,y=v=>m.t+plotH-(v-minY)/(maxY-minY)*plotH,zeroY=y(0); const ranges=[['12',''],['36','8 6'],['60','2 6']]; let svg=`<svg viewBox="0 0 ${w} ${h}"><defs><clipPath id="posClip"><rect x="${m.l}" y="${m.t}" width="${plotW}" height="${Math.max(0,zeroY-m.t)}"/></clipPath><clipPath id="negClip"><rect x="${m.l}" y="${zeroY}" width="${plotW}" height="${Math.max(0,h-m.b-zeroY)}"/></clipPath></defs>`; [-16,-12,-8,-4,0,2,4,6].forEach(v=>svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v===0?'rgba(255,255,255,.20)':'rgba(255,255,255,.07)'}"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="10.5" font-weight="900">${v}</text>`); ranges.forEach(([cut,dash])=>{ const rbColor=RANGE_COLORS[cut].RB,wrColor=RANGE_COLORS[cut].WR,wr=getValues(`Top ${cut}`,'WR'),rb=getValues(`Top ${cut}`,'RB'); const pts=YEARS.map((yr,i)=>{ const val=rb[i]-wr[i]; return [x(yr),y(val),val]; }),d=smoothPath(pts.map(p=>[p[0],p[1]])); svg+=`<path d="${d}" fill="none" stroke="${rbColor}" stroke-width="2.8" ${dash?`stroke-dasharray="${dash}"`:''} clip-path="url(#posClip)" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${wrColor}" stroke-width="2.8" ${dash?`stroke-dasharray="${dash}"`:''} clip-path="url(#negClip)" stroke-linecap="round"/>`; const last=pts.at(-1); svg+=`<text x="${last[0]+8}" y="${last[1]+4}" fill="${last[2]>=0?rbColor:wrColor}" font-size="10.2" font-weight="1000">T${cut}</text>`; }); YEARS.forEach(yr=>{ const xx=x(yr); svg+=`<text x="${xx}" y="${h-16}" text-anchor="middle" fill="#71717a" font-size="10" font-weight="900">${yr}</text>`; }); svg+=`<text x="${m.l}" y="18" fill="#e4e4e7" font-size="13" font-weight="1000">Negative = WR edge · Positive = RB edge</text></svg>`; byId('g2ThreeLines').innerHTML=svg;
 }
 function renderAll() { refreshControls(); renderGlobalChart(); renderMiniYearGrid(); renderG1Lines(); renderCombo(); renderG2ThreeLines(); }
+let resizeRenderTimer;
+window.addEventListener('resize',()=>{ clearTimeout(resizeRenderTimer); resizeRenderTimer=setTimeout(()=>{ if(Object.keys(POS_DATA).length) renderAll(); },140); });
