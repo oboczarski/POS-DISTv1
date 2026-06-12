@@ -271,16 +271,16 @@ const POS_CONFIG = {
   WR: {low:'#8153ff', mid:'#4276ff', high:'#0299fe'},
   TE: {low:'#ff6bc8', mid:'#bf4be4', high:'#7f2fff'}
 };
-const RANGE_COLORS = {'12':{RB:'#00ad87',WR:'#0467c1'},'36':{RB:'#00ffc6',WR:'#2c9cff'},'60':{RB:'#6afff6',WR:'#6ab7fc'}};
+const RANGE_COLORS = {'12':{RB:'#007d66',WR:'#0056a7'},'36':{RB:'#00c99d',WR:'#2499ff'},'60':{RB:'#7dffac',WR:'#41dfff'}};
 const G1_POINT_STYLE = {
-  desktopRadius: 7.2,
-  desktopStrokeWidth: 1.8,
-  desktopLabelSize: 6.1,
-  desktopLabelWeight: 1000,
-  desktopLabelColor: '#f8fafc',
+  desktopRadius: 9,
+  desktopStrokeWidth: 1,
+  desktopLabelSize: 11,
+  desktopLabelWeight: 400,
+  desktopLabelColor: '#FFF',
   mobileRadius: 3.3,
   mobileStrokeWidth: 1.6,
-  collisionOffsetDesktop: 6.4,
+  collisionOffsetDesktop: 13,
   collisionOffsetMobile: 3.8
 };
 const COMBO_BAR_STYLE = {

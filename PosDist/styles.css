@@ -11,7 +11,7 @@
 * { box-sizing:border-box; }
 html, body { margin:0; min-height:100%; }
 body {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Product Sans", "Segoe UI", Arial, sans-serif;
   color:var(--text);
   background:
     radial-gradient(900px 520px at 9% 0%, rgba(255,10,165,.12), transparent 46%),
@@ -267,11 +267,11 @@ svg[data-lucide] { display:inline-block; vertical-align:middle; }
 .flex-col{flex-direction:column;}
 .flex-wrap{flex-wrap:wrap;}
 .font-bold{font-weight:700;}
-.font-display{font-family:"Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;}
+.font-display{font-family:"Product Sans", "Segoe UI", Arial, sans-serif;}
 .font-extrabold{font-weight:800;}
 .font-medium{font-weight:500;}
 .font-mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;}
-.font-sans{font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;}
+.font-sans{font-family:"Product Sans", "Segoe UI", Arial, sans-serif;}
 .font-semibold{font-weight:600;}
 .from-brandGold\/20{--tw-gradient-from:rgba(226,177,60,0.2);--tw-gradient-to:rgba(255,255,255,0);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to);}
 .from-emerald-950\/15{--tw-gradient-from:rgba(2,44,34,0.15);--tw-gradient-to:rgba(255,255,255,0);--tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to);}
