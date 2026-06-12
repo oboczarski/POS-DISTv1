@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>POSITIONAL ANALYTICS ◊ 2007-2025 Canvas</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="styles.css" />
   <script defer src="app.js"></script>
 </head>
@@ -26,30 +27,33 @@
 <div class="glass-inner">
 <div class="panel-head">
 <div><div class="section-eyebrow"><svg fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M3 3v18h18"></path><path d="m7 15 4-4 3 3 5-7"></path></svg>POSITIONAL ANALYTICS ◊ 2007-2025</div><h2 class="section-title" id="globalTitle">Top 60 positional supply</h2><p class="section-sub" id="globalSubtitle">Position counts inside the selected fantasy-points rank range.</p></div>
-<div class="mode-toggle"><button class="mode-btn active" data-mode="single">Single range</button><button class="mode-btn" data-mode="grid">Grid view</button></div>
+<div class="dyn-panel-actions">
+<div class="mode-toggle dyn-mode-toggle" aria-label="Chart mode"><button class="mode-btn active" data-mode="single">Single range</button><button class="mode-btn" data-mode="grid">Grid view</button></div>
+<div class="mode-toggle dyn-supply-toggle" aria-label="Position supply view"><button class="mode-btn active" data-supply-view="rbwr">RB vs WR</button><button class="mode-btn" data-supply-view="all">ALL POS</button></div>
 </div>
-<div class="controls">
-<div class="range-row" id="rangeButtons"></div>
-<div class="pos-row" id="positionButtons"></div>
+</div>
+<div class="controls dyn-top-controls">
+<div class="range-row dyn-range-row" id="rangeButtons"></div>
+<div class="pos-row dyn-position-row" id="positionButtons"></div>
 </div>
 <div class="chart-wrap"><div id="globalChart"></div></div>
 <div class="stat-grid" id="summaryChips"></div>
 </div>
 </section>
-<section class="glass span-12 sub-chart-card">
+<section class="glass span-12 dyn-profile-panel">
+<div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">Position profiles</div><h2 class="section-title">Selected-range position cards</h2><p class="section-sub">Current count, rank inside the 19-year sample, historical average, and peak for each active position.</p></div></div><div class="profile-grid" id="positionProfiles"></div></div>
+</section>
+<section class="glass span-12 sub-chart-card dyn-mini-chart-card">
 <div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">New 1</div><h2 class="section-title">Mini line graph grid by year</h2><p class="section-sub">Each mini chart shows cumulative WR/RB counts at T6, T12, T24, T36, T48, and T60.</p></div></div><div class="sub-chart-body"><div id="miniYearGrid"></div></div></div>
 </section>
-<section class="glass span-12 sub-chart-card">
+<section class="glass span-12 sub-chart-card dyn-g1-chart-card">
 <div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">New 2</div><h2 class="section-title">G1 as rounded spline lines</h2><p class="section-sub">WR/RB supply across T12, T36, and T60.</p></div></div><div class="sub-chart-body"><div id="g1LineChart"></div></div></div>
 </section>
-<section class="glass span-12 sub-chart-card">
-<div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">New 3</div><h2 class="section-title">Combined count bars + difference markers</h2><p class="section-sub">Enlarged combined view. Bars show WR/RB counts; markers show WR-RB gap.</p></div></div><div class="sub-chart-body"><div id="comboG1G2"></div></div></div>
+<section class="glass span-12 sub-chart-card dyn-combo-chart-card">
+<div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">New 3</div><h2 class="section-title">Combined count bars + difference markers</h2><p class="section-sub">Enlarged combined view. Bars show WR/RB counts; markers show WR-RB gap.</p></div><div class="dyn-year-controls" aria-label="Combined chart year range"><label class="dyn-year-control"><span>Min Year</span><select id="comboMinYear"></select></label><label class="dyn-year-control"><span>Max Year</span><select id="comboMaxYear"></select></label></div></div><div class="sub-chart-body"><div id="comboG1G2"></div></div></div>
 </section>
 <section class="glass span-12 sub-chart-card">
 <div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">New 4</div><h2 class="section-title">G2 as three rounded spline lines</h2><p class="section-sub">Negative means more WR than RB. Positive means more RB than WR.</p></div></div><div class="sub-chart-body"><div id="g2ThreeLines"></div></div></div>
-</section>
-<section class="glass span-12">
-<div class="glass-inner"><div class="panel-head"><div><div class="section-eyebrow">Position profiles</div><h2 class="section-title">Selected-range position cards</h2><p class="section-sub">Current count, rank inside the 19-year sample, historical average, and peak for each active position.</p></div></div><div class="profile-grid" id="positionProfiles"></div></div>
 </section>
 </main>
 </div>
