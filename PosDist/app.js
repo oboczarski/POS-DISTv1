@@ -272,6 +272,29 @@ const POS_CONFIG = {
   TE: {low:'#ff6bc8', mid:'#bf4be4', high:'#7f2fff'}
 };
 const RANGE_COLORS = {'12':{RB:'#00ad87',WR:'#0467c1'},'36':{RB:'#00ffc6',WR:'#2c9cff'},'60':{RB:'#6afff6',WR:'#6ab7fc'}};
+const G1_POINT_STYLE = {
+  desktopRadius: 7.2,
+  desktopStrokeWidth: 1.8,
+  desktopLabelSize: 6.1,
+  desktopLabelWeight: 1000,
+  desktopLabelColor: '#f8fafc',
+  mobileRadius: 3.3,
+  mobileStrokeWidth: 1.6,
+  collisionOffsetDesktop: 6.4,
+  collisionOffsetMobile: 3.8
+};
+const COMBO_BAR_STYLE = {
+  chartHeight: 500,
+  groupWidth: 89,
+  barWidth: 8.5,
+  barGap: 0.8,
+  rangeStep: 28,
+  markerTop: 32,
+  markerBottom: 104,
+  barTop: 124,
+  barBottom: 400,
+  barMax: 26
+};
 const state = {
   range:'Top 60',
   allPosActivePositions:['QB','RB','WR','TE'],
@@ -426,10 +449,77 @@ function renderMiniYearGrid() {
   svg+='</svg>'; byId('miniYearGrid').innerHTML=svg;
 }
 function renderG1Lines() {
-  const mobile=isMobileViewport(), w=1100,h=mobile?346:386,m={l:42,r:78,t:28,b:44},plotW=w-m.l-m.r,plotH=h-m.t-m.b,x=yr=>m.l+(yr-YEARS[0])/(YEARS.at(-1)-YEARS[0])*plotW,y=v=>m.t+plotH-v/27*plotH; const series=[['12','WR'],['36','WR'],['60','WR'],['12','RB'],['36','RB'],['60','RB']]; let svg=`<svg viewBox="0 0 ${w} ${h}">`; [0,5,10,15,20,25].forEach(v=>svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="${mobile?9:10.5}" font-weight="900">${v}</text>`); YEARS.forEach((yr,i)=>{ const xx=x(yr); if(!mobile || i%2===0 || i===YEARS.length-1) svg+=`<text x="${xx}" y="${h-16}" text-anchor="middle" fill="#71717a" font-size="${mobile?8.5:10}" font-weight="900">${yr}</text>`; }); const pointEntries=[]; series.forEach(([cut,pos],si)=>{ const color=RANGE_COLORS[cut][pos], vals=getValues(`Top ${cut}`,pos), pts=vals.map((v,i)=>[x(YEARS[i]),y(v),v,i]), last=pts.at(-1), dash=si%3===1?'8 5':si%3===2?'2 5':''; svg+=`<path d="${smoothPath(pts.map(p=>[p[0],p[1]]))}" fill="none" stroke="${color}" stroke-width="${mobile?2.2:2.5}" ${dash?`stroke-dasharray="${dash}"`:''} stroke-linecap="round" stroke-linejoin="round"/><text x="${last[0]+8}" y="${last[1]+4}" fill="${color}" font-size="${mobile?8.8:10.2}" font-weight="1000">${pos} T${cut}</text>`; pts.forEach(p=>pointEntries.push({cut,pos,si,color,x:p[0],y:p[1],value:p[2],yearIndex:p[3]})); }); const bucketTotals=new Map(), bucketSeen=new Map(); pointEntries.forEach(p=>{ const key=`${p.yearIndex}-${p.value}`; bucketTotals.set(key,(bucketTotals.get(key)||0)+1); }); pointEntries.forEach(p=>{ const key=`${p.yearIndex}-${p.value}`, total=bucketTotals.get(key), seen=bucketSeen.get(key)||0, dx=(seen-(total-1)/2)*(mobile?4.2:8.2); bucketSeen.set(key,seen+1); const cx=p.x+dx, r=mobile?3.7:9.2; svg+=`<circle cx="${cx}" cy="${p.y}" r="${r}" fill="#050711" stroke="${p.color}" stroke-width="${mobile?1.8:2.1}" onmousemove="showTip(event,'<strong>${p.pos} T${p.cut} · ${YEARS[p.yearIndex]}</strong><br>Count: ${p.value}')" onmouseleave="hideTip()"/>`; if(!mobile) svg+=`<text x="${cx}" y="${p.y+2.6}" text-anchor="middle" fill="#f8fafc" font-size="6.7" font-weight="1000">${p.value}</text>`; }); svg+=`<text x="${m.l}" y="18" fill="#e4e4e7" font-size="13" font-weight="1000">WR/RB count lines · Scale max = 27</text></svg>`; byId('g1LineChart').innerHTML=svg;
+  const mobile=isMobileViewport(), w=1100,h=mobile?346:386,m={l:42,r:78,t:28,b:44};
+  const plotW=w-m.l-m.r, plotH=h-m.t-m.b;
+  const x=yr=>m.l+(yr-YEARS[0])/(YEARS.at(-1)-YEARS[0])*plotW;
+  const y=v=>m.t+plotH-v/27*plotH;
+  const series=[['12','WR'],['36','WR'],['60','WR'],['12','RB'],['36','RB'],['60','RB']];
+  let svg=`<svg viewBox="0 0 ${w} ${h}">`;
+  [0,5,10,15,20,25].forEach(v=>{
+    svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="${mobile?9:10.5}" font-weight="900">${v}</text>`;
+  });
+  YEARS.forEach((yr,i)=>{
+    const xx=x(yr);
+    if(!mobile || i%2===0 || i===YEARS.length-1) svg+=`<text x="${xx}" y="${h-16}" text-anchor="middle" fill="#71717a" font-size="${mobile?8.5:10}" font-weight="900">${yr}</text>`;
+  });
+
+  const pointEntries=[];
+  series.forEach(([cut,pos],si)=>{
+    const color=RANGE_COLORS[cut][pos], vals=getValues(`Top ${cut}`,pos);
+    const pts=vals.map((v,i)=>[x(YEARS[i]),y(v),v,i]), last=pts.at(-1);
+    const dash=si%3===1?'8 5':si%3===2?'2 5':'';
+    svg+=`<path d="${smoothPath(pts.map(p=>[p[0],p[1]]))}" fill="none" stroke="${color}" stroke-width="${mobile?2.2:2.5}" ${dash?`stroke-dasharray="${dash}"`:''} stroke-linecap="round" stroke-linejoin="round"/><text x="${last[0]+8}" y="${last[1]+4}" fill="${color}" font-size="${mobile?8.8:10.2}" font-weight="1000">${pos} T${cut}</text>`;
+    pts.forEach(p=>pointEntries.push({cut,pos,si,color,x:p[0],y:p[1],value:p[2],yearIndex:p[3]}));
+  });
+
+  const bucketTotals=new Map(), bucketSeen=new Map();
+  pointEntries.forEach(p=>{
+    const key=`${p.yearIndex}-${p.value}`;
+    bucketTotals.set(key,(bucketTotals.get(key)||0)+1);
+  });
+  pointEntries.forEach(p=>{
+    const key=`${p.yearIndex}-${p.value}`, total=bucketTotals.get(key), seen=bucketSeen.get(key)||0;
+    const dx=(seen-(total-1)/2)*(mobile?G1_POINT_STYLE.collisionOffsetMobile:G1_POINT_STYLE.collisionOffsetDesktop);
+    bucketSeen.set(key,seen+1);
+    const cx=p.x+dx;
+    const r=mobile?G1_POINT_STYLE.mobileRadius:G1_POINT_STYLE.desktopRadius;
+    const strokeWidth=mobile?G1_POINT_STYLE.mobileStrokeWidth:G1_POINT_STYLE.desktopStrokeWidth;
+    svg+=`<circle cx="${cx}" cy="${p.y}" r="${r}" fill="#050711" stroke="${p.color}" stroke-width="${strokeWidth}" onmousemove="showTip(event,'<strong>${p.pos} T${p.cut} · ${YEARS[p.yearIndex]}</strong><br>Count: ${p.value}')" onmouseleave="hideTip()"/>`;
+    if(!mobile) svg+=`<text x="${cx}" y="${p.y+2.2}" text-anchor="middle" fill="${G1_POINT_STYLE.desktopLabelColor}" font-size="${G1_POINT_STYLE.desktopLabelSize}" font-weight="${G1_POINT_STYLE.desktopLabelWeight}">${p.value}</text>`;
+  });
+  svg+=`<text x="${m.l}" y="18" fill="#e4e4e7" font-size="13" font-weight="1000">WR/RB count lines · Scale max = 27</text></svg>`;
+  byId('g1LineChart').innerHTML=svg;
 }
 function renderCombo() {
-  const years=getYearsInComboWindow(), groupW=78,w=60+years.length*groupW+22,h=620,markerTop=38,markerBottom=132,barTop=150,barBottom=520,barMax=26,barW=10.5,barGap=2.5,rangeStep=25; const vals=years.flatMap(yr=>{ const yi=YEARS.indexOf(yr); return ['12','36','60'].map(c=>getValues(`Top ${c}`,'WR')[yi]-getValues(`Top ${c}`,'RB')[yi]); }); const gapMin=Math.min(-10,Math.min(...vals)-1),gapMax=Math.max(12,Math.max(...vals)+1),gapY=v=>markerTop+(markerBottom-markerTop)-(v-gapMin)/(gapMax-gapMin)*(markerBottom-markerTop),gapZero=gapY(0),barY=v=>barTop+(barBottom-barTop)-Math.min(v,barMax)/barMax*(barBottom-barTop); let svg=`<svg viewBox="0 0 ${w} ${h}">`; [0,5,10,15,20,26].forEach(v=>svg+=`<line x1="46" x2="${w-18}" y1="${barY(v)}" y2="${barY(v)}" stroke="rgba(255,255,255,.075)"/><text x="36" y="${barY(v)+4}" text-anchor="end" fill="#52525b" font-size="11" font-weight="900">${v}</text>`); years.forEach((year,windowIndex)=>{ const yi=YEARS.indexOf(year), gx=46+windowIndex*groupW+9; ['12','36','60'].forEach((cut,ci)=>{ const cx=gx+ci*rangeStep, wr=getValues(`Top ${cut}`,'WR')[yi], rb=getValues(`Top ${cut}`,'RB')[yi], gap=wr-rb, wrColor=RANGE_COLORS[cut].WR,rbColor=RANGE_COLORS[cut].RB,gapColor=gap>=0?wrColor:rbColor,markerX=cx+barW+barGap/2,markerY=gapY(gap); svg+=`<line x1="${markerX}" x2="${markerX}" y1="${gapZero}" y2="${markerY}" stroke="${gapColor}" stroke-width="3.5" stroke-linecap="round"/><circle cx="${markerX}" cy="${markerY}" r="5.2" fill="#050711" stroke="${gapColor}" stroke-width="2.4"/><text x="${markerX}" y="${gap>=0?markerY-8:markerY+15}" text-anchor="middle" fill="${gapColor}" font-size="9" font-weight="1000">${gap>0?'+':''}${gap}</text><rect x="${cx}" y="${barY(wr)}" width="${barW}" height="${barBottom-barY(wr)}" rx="4.8" fill="${wrColor}"/><rect x="${cx+barW+barGap}" y="${barY(rb)}" width="${barW}" height="${barBottom-barY(rb)}" rx="4.8" fill="${rbColor}"/><text x="${markerX}" y="${h-48}" text-anchor="middle" fill="#71717a" font-size="9" font-weight="900">T${cut}</text>`; }); svg+=`<text x="${gx+30}" y="${h-24}" text-anchor="middle" fill="#e4e4e7" font-size="10.5" font-weight="1000">${year}</text>`; }); svg+=`<text x="46" y="24" fill="#e4e4e7" font-size="14" font-weight="1000">Bars = WR/RB counts · Markers = WR-RB gap · ${state.comboMinYear}-${state.comboMaxYear}</text></svg>`; byId('comboG1G2').innerHTML=svg;
+  const years=getYearsInComboWindow();
+  const groupW=COMBO_BAR_STYLE.groupWidth;
+  const w=60+years.length*groupW+22, h=COMBO_BAR_STYLE.chartHeight;
+  const markerTop=COMBO_BAR_STYLE.markerTop, markerBottom=COMBO_BAR_STYLE.markerBottom;
+  const barTop=COMBO_BAR_STYLE.barTop, barBottom=COMBO_BAR_STYLE.barBottom, barMax=COMBO_BAR_STYLE.barMax;
+  const barW=COMBO_BAR_STYLE.barWidth, barGap=COMBO_BAR_STYLE.barGap, rangeStep=COMBO_BAR_STYLE.rangeStep;
+  const vals=years.flatMap(yr=>{
+    const yi=YEARS.indexOf(yr);
+    return ['12','36','60'].map(c=>getValues(`Top ${c}`,'WR')[yi]-getValues(`Top ${c}`,'RB')[yi]);
+  });
+  const gapMin=Math.min(-10,Math.min(...vals)-1), gapMax=Math.max(12,Math.max(...vals)+1);
+  const gapY=v=>markerTop+(markerBottom-markerTop)-(v-gapMin)/(gapMax-gapMin)*(markerBottom-markerTop);
+  const gapZero=gapY(0), barY=v=>barTop+(barBottom-barTop)-Math.min(v,barMax)/barMax*(barBottom-barTop);
+  let svg=`<svg viewBox="0 0 ${w} ${h}">`;
+  [0,5,10,15,20,26].forEach(v=>{
+    svg+=`<line x1="46" x2="${w-18}" y1="${barY(v)}" y2="${barY(v)}" stroke="rgba(255,255,255,.075)"/><text x="36" y="${barY(v)+4}" text-anchor="end" fill="#52525b" font-size="10" font-weight="900">${v}</text>`;
+  });
+  years.forEach((year,windowIndex)=>{
+    const yi=YEARS.indexOf(year), gx=46+windowIndex*groupW+9;
+    ['12','36','60'].forEach((cut,ci)=>{
+      const cx=gx+ci*rangeStep, wr=getValues(`Top ${cut}`,'WR')[yi], rb=getValues(`Top ${cut}`,'RB')[yi];
+      const gap=wr-rb, wrColor=RANGE_COLORS[cut].WR, rbColor=RANGE_COLORS[cut].RB, gapColor=gap>=0?wrColor:rbColor;
+      const markerX=cx+barW+barGap/2, markerY=gapY(gap);
+      svg+=`<line x1="${markerX}" x2="${markerX}" y1="${gapZero}" y2="${markerY}" stroke="${gapColor}" stroke-width="3.3" stroke-linecap="round"/><circle cx="${markerX}" cy="${markerY}" r="4.8" fill="#050711" stroke="${gapColor}" stroke-width="2.1"/><text x="${markerX}" y="${gap>=0?markerY-7:markerY+13}" text-anchor="middle" fill="${gapColor}" font-size="8.4" font-weight="1000">${gap>0?'+':''}${gap}</text><rect x="${cx}" y="${barY(wr)}" width="${barW}" height="${barBottom-barY(wr)}" rx="4" fill="${wrColor}"/><rect x="${cx+barW+barGap}" y="${barY(rb)}" width="${barW}" height="${barBottom-barY(rb)}" rx="4" fill="${rbColor}"/><text x="${markerX}" y="${h-35}" text-anchor="middle" fill="#71717a" font-size="8.6" font-weight="900">T${cut}</text>`;
+    });
+    svg+=`<text x="${gx+30}" y="${h-15}" text-anchor="middle" fill="#e4e4e7" font-size="10" font-weight="1000">${year}</text>`;
+  });
+  svg+=`<text x="46" y="22" fill="#e4e4e7" font-size="13" font-weight="1000">Bars = WR/RB counts · Markers = WR-RB gap · ${state.comboMinYear}-${state.comboMaxYear}</text></svg>`;
+  byId('comboG1G2').innerHTML=svg;
 }
 function renderG2ThreeLines() {
   const w=1100,h=386,m={l:44,r:76,t:30,b:44},plotW=w-m.l-m.r,plotH=h-m.t-m.b,minY=-16,maxY=6,x=yr=>m.l+(yr-YEARS[0])/(YEARS.at(-1)-YEARS[0])*plotW,y=v=>m.t+plotH-(v-minY)/(maxY-minY)*plotH,zeroY=y(0); const ranges=[['12',''],['36','8 6'],['60','2 6']]; let svg=`<svg viewBox="0 0 ${w} ${h}"><defs><clipPath id="posClip"><rect x="${m.l}" y="${m.t}" width="${plotW}" height="${Math.max(0,zeroY-m.t)}"/></clipPath><clipPath id="negClip"><rect x="${m.l}" y="${zeroY}" width="${plotW}" height="${Math.max(0,h-m.b-zeroY)}"/></clipPath></defs>`; [-16,-12,-8,-4,0,2,4,6].forEach(v=>svg+=`<line x1="${m.l}" x2="${w-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v===0?'rgba(255,255,255,.20)':'rgba(255,255,255,.07)'}"/><text x="${m.l-8}" y="${y(v)+4}" text-anchor="end" fill="#52525b" font-size="10.5" font-weight="900">${v}</text>`); ranges.forEach(([cut,dash])=>{ const rbColor=RANGE_COLORS[cut].RB,wrColor=RANGE_COLORS[cut].WR,wr=getValues(`Top ${cut}`,'WR'),rb=getValues(`Top ${cut}`,'RB'); const pts=YEARS.map((yr,i)=>{ const val=rb[i]-wr[i]; return [x(yr),y(val),val]; }),d=smoothPath(pts.map(p=>[p[0],p[1]])); svg+=`<path d="${d}" fill="none" stroke="${rbColor}" stroke-width="2.8" ${dash?`stroke-dasharray="${dash}"`:''} clip-path="url(#posClip)" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${wrColor}" stroke-width="2.8" ${dash?`stroke-dasharray="${dash}"`:''} clip-path="url(#negClip)" stroke-linecap="round"/>`; const last=pts.at(-1); svg+=`<text x="${last[0]+8}" y="${last[1]+4}" fill="${last[2]>=0?rbColor:wrColor}" font-size="10.2" font-weight="1000">T${cut}</text>`; }); YEARS.forEach(yr=>{ const xx=x(yr); svg+=`<text x="${xx}" y="${h-16}" text-anchor="middle" fill="#71717a" font-size="10" font-weight="900">${yr}</text>`; }); svg+=`<text x="${m.l}" y="18" fill="#e4e4e7" font-size="13" font-weight="1000">Negative = WR edge · Positive = RB edge</text></svg>`; byId('g2ThreeLines').innerHTML=svg;
